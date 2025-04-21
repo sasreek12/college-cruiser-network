@@ -52,6 +52,18 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+                golocal: {
+                    primary: "#9b87f5",
+                    secondary: "#7E69AB",
+                    tertiary: "#6E59A5",
+                    dark: "#1A1F2C",
+                    light: "#D6BCFA",
+                    softgreen: "#F2FCE2",
+                    softyellow: "#FEF7CD",
+                    softorange: "#FEC6A1",
+                    softpurple: "#E5DEFF",
+                    softgray: "#F1F0FB",
+                },
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
