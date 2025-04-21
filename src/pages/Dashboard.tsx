@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -170,12 +169,12 @@ const Dashboard = () => {
           
         if (error) throw error;
         
-        // Increase available seats back in the rides table
-        // This assumes we have a function to increase available seats
-        await supabase.rpc('increase_available_seats', {
-          ride_id: id,
-          seats_to_increase: 1
-        });
+        // Increase available seats back
+        const { success, error: updateError } = await increaseAvailableSeats(id, 1);
+        
+        if (!success || updateError) {
+          throw updateError || new Error('Failed to update seat availability');
+        }
       }
       
       toast({

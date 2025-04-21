@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -11,6 +10,7 @@ import { Calendar as CalendarIcon, Search } from "lucide-react";
 import Navbar from '@/components/Navbar';
 import RideCard, { RideCardProps } from '@/components/RideCard';
 import { supabase } from '@/integrations/supabase/client';
+import { decreaseAvailableSeats } from '@/integrations/supabase/functions';
 
 const BookRide = () => {
   const { toast } = useToast();
@@ -20,20 +20,17 @@ const BookRide = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch rides from Supabase
   const fetchRides = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      // Get current user session
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
         throw new Error(sessionError.message);
       }
       
-      // Fetch all rides with seats available > 0
       const { data, error: ridesError } = await supabase
         .from('rides')
         .select('*, profiles(full_name)')
@@ -48,7 +45,6 @@ const BookRide = () => {
         return;
       }
 
-      // Transform data to match RideCardProps format
       const formattedRides = data.map(ride => ({
         id: ride.id,
         hostName: ride.profiles?.full_name || 'Unknown Host',
@@ -76,7 +72,6 @@ const BookRide = () => {
   useEffect(() => {
     fetchRides();
     
-    // Set up a subscription for real-time updates to the rides table
     const channel = supabase
       .channel('public:rides')
       .on('postgres_changes', 
@@ -94,7 +89,6 @@ const BookRide = () => {
 
   const bookRide = async (id: string) => {
     try {
-      // Get current user session
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !sessionData.session) {
@@ -103,27 +97,22 @@ const BookRide = () => {
       
       const userId = sessionData.session.user.id;
       
-      // Book the ride (insert into bookings table)
       const { error: bookingError } = await supabase
         .from('bookings')
         .insert({
           ride_id: id,
           user_id: userId,
-          seats_booked: 1  // Booking 1 seat by default
+          seats_booked: 1
         });
         
       if (bookingError) {
         throw new Error(bookingError.message);
       }
       
-      // Update seats available in rides table
-      const { error: updateError } = await supabase.rpc('decrease_available_seats', {
-        ride_id: id,
-        seats_to_decrease: 1
-      });
+      const { success, error: updateError } = await decreaseAvailableSeats(id, 1);
       
-      if (updateError) {
-        throw new Error(updateError.message);
+      if (!success || updateError) {
+        throw new Error(updateError?.message || 'Failed to update seat availability');
       }
       
       toast({
@@ -131,7 +120,6 @@ const BookRide = () => {
         description: "You've successfully booked this ride.",
       });
       
-      // Refresh the rides data after booking
       fetchRides();
     } catch (err: any) {
       console.error(`Error booking ride ${id}:`, err);
@@ -144,7 +132,6 @@ const BookRide = () => {
   };
 
   const filteredRides = availableRides.filter(ride => {
-    // Filter by search query (case insensitive)
     if (
       searchQuery && 
       !ride.pickupLocation.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -153,10 +140,8 @@ const BookRide = () => {
       return false;
     }
     
-    // Filter by date if selected
     if (date) {
       const rideDate = ride.date;
-      // Check if the ride date matches the selected date
       if (!rideDate.includes(format(date, "MMM dd, yyyy"))) {
         return false;
       }
