@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
+import { supabase } from '@/integrations/supabase/client';
 
 const formSchema = z.object({
   email: z
@@ -45,22 +46,25 @@ const Login = () => {
     setError(null);
     setIsLoading(true);
     
-    // This is a placeholder for actual authentication logic
-    // In a real app, this would call Supabase auth
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
       
-      // Mock successful login
+      if (authError) {
+        throw authError;
+      }
+      
       toast({
         title: "Login successful",
         description: "Redirecting to dashboard...",
       });
       
-      // Redirect to dashboard
       navigate("/dashboard");
-    } catch (err) {
-      setError("Invalid email or password. Please try again.");
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError(err.message || "Invalid email or password. Please try again.");
     } finally {
       setIsLoading(false);
     }

@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
+import { supabase } from '@/integrations/supabase/client';
 
 const formSchema = z.object({
   fullName: z
@@ -58,22 +59,31 @@ const Signup = () => {
     setError(null);
     setIsLoading(true);
     
-    // This is a placeholder for actual registration logic
-    // In a real app, this would call Supabase auth
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock successful registration
-      toast({
-        title: "Account created!",
-        description: "Redirecting to dashboard...",
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: {
+            full_name: data.fullName,
+          },
+        }
       });
       
-      // Redirect to dashboard
-      navigate("/dashboard");
-    } catch (err) {
-      setError("There was a problem creating your account. Please try again.");
+      if (authError) {
+        throw authError;
+      }
+      
+      toast({
+        title: "Account created!",
+        description: "Please check your email to confirm your account.",
+      });
+      
+      // Redirect to login page
+      navigate("/login");
+    } catch (err: any) {
+      console.error("Signup error:", err);
+      setError(err.message || "There was a problem creating your account. Please try again.");
     } finally {
       setIsLoading(false);
     }

@@ -9,7 +9,107 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      bookings: {
+        Row: {
+          created_at: string
+          id: string
+          ride_id: string
+          seats_booked: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ride_id: string
+          seats_booked: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ride_id?: string
+          seats_booked?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_ride_id_fkey"
+            columns: ["ride_id"]
+            isOneToOne: false
+            referencedRelation: "rides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      rides: {
+        Row: {
+          created_at: string
+          date: string
+          destination: string
+          id: string
+          pickup_location: string
+          seats_available: number
+          time: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          destination: string
+          id?: string
+          pickup_location: string
+          seats_available: number
+          time: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          destination?: string
+          id?: string
+          pickup_location?: string
+          seats_available?: number
+          time?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
