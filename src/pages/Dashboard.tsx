@@ -6,6 +6,7 @@ import Navbar from '@/components/Navbar';
 import RideCard, { RideCardProps } from '@/components/RideCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { increaseAvailableSeats } from '@/integrations/supabase/functions';
 
 const Dashboard = () => {
   const { toast } = useToast();

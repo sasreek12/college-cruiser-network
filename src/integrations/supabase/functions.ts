@@ -5,7 +5,7 @@ import { supabase } from './client';
  * Decrease the available seats for a ride
  */
 export const decreaseAvailableSeats = async (
-  rideId: string | undefined, 
+  rideId: string, 
   seatsToDecrease: number
 ): Promise<{ success: boolean; error: Error | null }> => {
   try {
@@ -32,7 +32,7 @@ export const decreaseAvailableSeats = async (
  * Increase the available seats for a ride
  */
 export const increaseAvailableSeats = async (
-  rideId: string | undefined, 
+  rideId: string, 
   seatsToIncrease: number
 ): Promise<{ success: boolean; error: Error | null }> => {
   try {
