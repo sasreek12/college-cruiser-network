@@ -1,14 +1,18 @@
 
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from '@/hooks/use-toast';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   // Check if the user is logged in (for now, just check if on welcome page)
   const isLoggedOut = location.pathname === '/' || 
@@ -24,6 +28,35 @@ const Navbar = () => {
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
+  };
+
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        toast({
+          title: "Logout failed",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out."
+      });
+      
+      navigate("/login");
+    } catch (error: any) {
+      console.error("Logout error:", error);
+      toast({
+        title: "Logout failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -59,7 +92,7 @@ const Navbar = () => {
               <div className="hidden md:ml-4 md:flex md:items-center">
                 <Button 
                   variant="ghost" 
-                  onClick={() => {}} 
+                  onClick={handleLogout} 
                   className="text-gray-600 hover:text-golocal-primary"
                 >
                   Logout
@@ -119,7 +152,7 @@ const Navbar = () => {
             ))}
             <Button 
               variant="ghost" 
-              onClick={() => {}} 
+              onClick={handleLogout} 
               className="w-full text-left px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-golocal-primary"
             >
               Logout

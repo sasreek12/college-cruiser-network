@@ -1,40 +1,198 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import Navbar from '@/components/Navbar';
 import RideCard, { RideCardProps } from '@/components/RideCard';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const Dashboard = () => {
-  // Mock data for upcoming rides
-  const [upcomingHostedRides] = useState<Omit<RideCardProps, 'onBook' | 'onCancel'>[]>([
-    {
-      id: '1',
-      hostName: 'You',
-      pickupLocation: 'Student Center',
-      destination: 'Downtown',
-      date: 'Apr 22, 2025',
-      time: '5:30 PM',
-      seatsAvailable: 2,
-    },
-  ]);
+  const { toast } = useToast();
+  const [upcomingHostedRides, setUpcomingHostedRides] = useState<Omit<RideCardProps, 'onBook' | 'onCancel'>[]>([]);
+  const [upcomingBookedRides, setUpcomingBookedRides] = useState<Omit<RideCardProps, 'onBook' | 'onCancel'>[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    ridesHosted: 0,
+    ridesTaken: 0,
+    co2Saved: 0,
+    moneySaved: 0
+  });
 
-  const [upcomingBookedRides] = useState<Omit<RideCardProps, 'onBook' | 'onCancel'>[]>([
-    {
-      id: '2',
-      hostName: 'Sarah L.',
-      pickupLocation: 'Library',
-      destination: 'Mall',
-      date: 'Apr 23, 2025',
-      time: '3:00 PM',
-      seatsAvailable: 0,
-    },
-  ]);
+  const fetchRides = async () => {
+    try {
+      setLoading(true);
+      
+      // Get current user session
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !sessionData.session) {
+        throw new Error('You must be logged in to view your rides');
+      }
+      
+      const userId = sessionData.session.user.id;
+      
+      // Fetch rides the user is hosting
+      const { data: hostedData, error: hostedError } = await supabase
+        .from('rides')
+        .select('*')
+        .eq('user_id', userId)
+        .gt('seats_available', 0);
+        
+      if (hostedError) throw hostedError;
+      
+      // Fetch rides the user has booked
+      const { data: bookedData, error: bookedError } = await supabase
+        .from('bookings')
+        .select(`
+          ride_id,
+          seats_booked,
+          rides (
+            id, 
+            pickup_location, 
+            destination, 
+            date, 
+            time, 
+            seats_available,
+            user_id,
+            profiles (
+              full_name
+            )
+          )
+        `)
+        .eq('user_id', userId);
+        
+      if (bookedError) throw bookedError;
+      
+      // Format hosted rides for display
+      const formattedHostedRides = hostedData ? hostedData.map(ride => ({
+        id: ride.id,
+        hostName: 'You',
+        pickupLocation: ride.pickup_location,
+        destination: ride.destination,
+        date: new Date(ride.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        time: ride.time,
+        seatsAvailable: ride.seats_available,
+      })) : [];
+      
+      // Format booked rides for display
+      const formattedBookedRides = bookedData ? bookedData
+        .filter(booking => booking.rides) // Ensure ride data exists
+        .map(booking => ({
+          id: booking.ride_id,
+          hostName: booking.rides.profiles?.full_name || 'Unknown Host',
+          pickupLocation: booking.rides.pickup_location,
+          destination: booking.rides.destination,
+          date: new Date(booking.rides.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          time: booking.rides.time,
+          seatsAvailable: 0, // Already booked
+        })) : [];
+      
+      setUpcomingHostedRides(formattedHostedRides);
+      setUpcomingBookedRides(formattedBookedRides);
+      
+      // Calculate stats
+      // In a real app, these would be calculated more precisely
+      const totalHosted = formattedHostedRides.length;
+      const totalTaken = formattedBookedRides.length;
+      const estimatedCO2PerRide = 4; // kg CO2 saved per ride, this is an example value
+      const estimatedMoneyPerRide = 7; // $ saved per ride, this is an example value
+      
+      setStats({
+        ridesHosted: totalHosted,
+        ridesTaken: totalTaken,
+        co2Saved: (totalHosted + totalTaken) * estimatedCO2PerRide,
+        moneySaved: (totalHosted + totalTaken) * estimatedMoneyPerRide
+      });
+      
+    } catch (error: any) {
+      console.error("Error fetching rides:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load your rides. Please try again later.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const cancelRide = (id: string) => {
-    // This would connect to Supabase in a real implementation
-    console.log(`Cancelled ride ${id}`);
+  useEffect(() => {
+    fetchRides();
+    
+    // Set up a subscription for real-time updates
+    const channel = supabase
+      .channel('dashboard-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'rides' }, 
+        () => fetchRides()
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'bookings' },
+        () => fetchRides()
+      )
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const cancelRide = async (id: string) => {
+    try {
+      // Get current user session
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !sessionData.session) {
+        throw new Error('You must be logged in to cancel a ride');
+      }
+      
+      // Check if this is a ride the user is hosting or has booked
+      const isHosted = upcomingHostedRides.some(ride => ride.id === id);
+      
+      if (isHosted) {
+        // Delete the hosted ride
+        const { error } = await supabase
+          .from('rides')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', sessionData.session.user.id);
+          
+        if (error) throw error;
+      } else {
+        // Cancel the booking
+        const { error } = await supabase
+          .from('bookings')
+          .delete()
+          .eq('ride_id', id)
+          .eq('user_id', sessionData.session.user.id);
+          
+        if (error) throw error;
+        
+        // Increase available seats back in the rides table
+        // This assumes we have a function to increase available seats
+        await supabase.rpc('increase_available_seats', {
+          ride_id: id,
+          seats_to_increase: 1
+        });
+      }
+      
+      toast({
+        title: "Ride cancelled",
+        description: "The ride has been successfully cancelled.",
+      });
+      
+      // Refresh ride data
+      fetchRides();
+    } catch (error: any) {
+      console.error(`Error cancelling ride ${id}:`, error);
+      toast({
+        title: "Cancellation failed",
+        description: error.message || "An error occurred while cancelling the ride.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -59,7 +217,11 @@ const Dashboard = () => {
                 </Link>
               </div>
               
-              {upcomingHostedRides.length === 0 && upcomingBookedRides.length === 0 ? (
+              {loading ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Loading your rides...</p>
+                </div>
+              ) : upcomingHostedRides.length === 0 && upcomingBookedRides.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500 mb-4">You don't have any upcoming rides.</p>
                   <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -139,19 +301,19 @@ const Dashboard = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Rides Hosted</span>
-                    <span className="font-semibold">3</span>
+                    <span className="font-semibold">{stats.ridesHosted}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Rides Taken</span>
-                    <span className="font-semibold">5</span>
+                    <span className="font-semibold">{stats.ridesTaken}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">CO₂ Saved</span>
-                    <span className="font-semibold">24 kg</span>
+                    <span className="font-semibold">{stats.co2Saved} kg</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Money Saved</span>
-                    <span className="font-semibold">$42</span>
+                    <span className="font-semibold">${stats.moneySaved}</span>
                   </div>
                 </div>
               </CardContent>

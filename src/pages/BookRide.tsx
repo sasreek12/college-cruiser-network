@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,51 +10,137 @@ import { cn } from "@/lib/utils";
 import { Calendar as CalendarIcon, Search } from "lucide-react";
 import Navbar from '@/components/Navbar';
 import RideCard, { RideCardProps } from '@/components/RideCard';
+import { supabase } from '@/integrations/supabase/client';
 
 const BookRide = () => {
   const { toast } = useToast();
   const [date, setDate] = useState<Date>();
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // Mock data for available rides
-  const [availableRides] = useState<Omit<RideCardProps, 'onCancel'>[]>([
-    {
-      id: '1',
-      hostName: 'Michael T.',
-      pickupLocation: 'Student Center',
-      destination: 'Downtown',
-      date: 'Apr 22, 2025',
-      time: '5:30 PM',
-      seatsAvailable: 3,
-    },
-    {
-      id: '2',
-      hostName: 'Sarah L.',
-      pickupLocation: 'Library',
-      destination: 'Mall',
-      date: 'Apr 23, 2025',
-      time: '3:00 PM',
-      seatsAvailable: 2,
-    },
-    {
-      id: '3',
-      hostName: 'James K.',
-      pickupLocation: 'Dorm C',
-      destination: 'Airport',
-      date: 'Apr 25, 2025',
-      time: '6:00 AM',
-      seatsAvailable: 1,
-    },
-  ]);
+  const [availableRides, setAvailableRides] = useState<Omit<RideCardProps, 'onCancel'>[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const bookRide = (id: string) => {
-    // This would connect to Supabase in a real implementation
-    console.log(`Booked ride ${id}`);
+  // Fetch rides from Supabase
+  const fetchRides = async () => {
+    setLoading(true);
+    setError(null);
     
-    toast({
-      title: "Ride booked!",
-      description: "You've successfully booked this ride.",
-    });
+    try {
+      // Get current user session
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        throw new Error(sessionError.message);
+      }
+      
+      // Fetch all rides with seats available > 0
+      const { data, error: ridesError } = await supabase
+        .from('rides')
+        .select('*, profiles(full_name)')
+        .gt('seats_available', 0);
+        
+      if (ridesError) {
+        throw new Error(ridesError.message);
+      }
+
+      if (!data) {
+        setAvailableRides([]);
+        return;
+      }
+
+      // Transform data to match RideCardProps format
+      const formattedRides = data.map(ride => ({
+        id: ride.id,
+        hostName: ride.profiles?.full_name || 'Unknown Host',
+        pickupLocation: ride.pickup_location,
+        destination: ride.destination,
+        date: format(new Date(ride.date), 'MMM dd, yyyy'),
+        time: ride.time,
+        seatsAvailable: ride.seats_available,
+      }));
+
+      setAvailableRides(formattedRides);
+    } catch (err: any) {
+      console.error('Error fetching rides:', err);
+      setError('Failed to load rides. Please try again later.');
+      toast({
+        title: "Error",
+        description: "Failed to load available rides.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRides();
+    
+    // Set up a subscription for real-time updates to the rides table
+    const channel = supabase
+      .channel('public:rides')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'rides' }, 
+        () => {
+          fetchRides();
+        }
+      )
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const bookRide = async (id: string) => {
+    try {
+      // Get current user session
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !sessionData.session) {
+        throw new Error('You must be logged in to book a ride');
+      }
+      
+      const userId = sessionData.session.user.id;
+      
+      // Book the ride (insert into bookings table)
+      const { error: bookingError } = await supabase
+        .from('bookings')
+        .insert({
+          ride_id: id,
+          user_id: userId,
+          seats_booked: 1  // Booking 1 seat by default
+        });
+        
+      if (bookingError) {
+        throw new Error(bookingError.message);
+      }
+      
+      // Update seats available in rides table
+      const { error: updateError } = await supabase.rpc('decrease_available_seats', {
+        ride_id: id,
+        seats_to_decrease: 1
+      });
+      
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+      
+      toast({
+        title: "Ride booked!",
+        description: "You've successfully booked this ride.",
+      });
+      
+      // Refresh the rides data after booking
+      fetchRides();
+    } catch (err: any) {
+      console.error(`Error booking ride ${id}:`, err);
+      toast({
+        title: "Booking failed",
+        description: err.message || "An error occurred while booking the ride.",
+        variant: "destructive"
+      });
+    }
   };
 
   const filteredRides = availableRides.filter(ride => {
@@ -70,8 +156,7 @@ const BookRide = () => {
     // Filter by date if selected
     if (date) {
       const rideDate = ride.date;
-      // Note: In a real app, we'd do proper date comparison
-      // This is just for demo purposes
+      // Check if the ride date matches the selected date
       if (!rideDate.includes(format(date, "MMM dd, yyyy"))) {
         return false;
       }
@@ -132,9 +217,32 @@ const BookRide = () => {
         </div>
         
         <div className="space-y-6">
-          <h2 className="text-xl font-semibold">Available Rides</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold">Available Rides</h2>
+            <Button 
+              variant="outline" 
+              onClick={fetchRides}
+              className="text-sm"
+            >
+              Refresh Rides
+            </Button>
+          </div>
           
-          {filteredRides.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12 bg-white rounded-lg shadow-sm">
+              <p className="text-gray-500">Loading available rides...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 bg-white rounded-lg shadow-sm">
+              <p className="text-gray-500">{error}</p>
+              <Button 
+                onClick={fetchRides} 
+                className="mt-4 bg-golocal-primary hover:bg-golocal-secondary"
+              >
+                Try Again
+              </Button>
+            </div>
+          ) : filteredRides.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-lg shadow-sm">
               <p className="text-gray-500 mb-2">No rides match your filters.</p>
               <p className="text-gray-500">Try adjusting your search or date criteria.</p>
