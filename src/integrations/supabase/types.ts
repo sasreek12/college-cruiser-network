@@ -15,6 +15,7 @@ export type Database = {
           id: string
           ride_id: string
           seats_booked: number
+          status: string
           user_id: string
         }
         Insert: {
@@ -22,6 +23,7 @@ export type Database = {
           id?: string
           ride_id: string
           seats_booked: number
+          status?: string
           user_id: string
         }
         Update: {
@@ -29,6 +31,7 @@ export type Database = {
           id?: string
           ride_id?: string
           seats_booked?: number
+          status?: string
           user_id?: string
         }
         Relationships: [

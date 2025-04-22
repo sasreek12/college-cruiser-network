@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,6 @@ import { Calendar as CalendarIcon, Search } from "lucide-react";
 import Navbar from '@/components/Navbar';
 import RideCard, { RideCardProps } from '@/components/RideCard';
 import { supabase } from '@/integrations/supabase/client';
-import { decreaseAvailableSeats } from '@/integrations/supabase/functions';
 
 const BookRide = () => {
   const { toast } = useToast();
@@ -98,22 +98,34 @@ const BookRide = () => {
       
       const userId = sessionData.session.user.id;
       
-      const { error: bookingError } = await supabase
+      // Check available seats before booking
+      const { data: rideData, error: rideError } = await supabase
+        .from('rides')
+        .select('seats_available')
+        .eq('id', id)
+        .single();
+      
+      if (rideError || !rideData) {
+        throw new Error('Unable to find ride details');
+      }
+      
+      if (rideData.seats_available <= 0) {
+        throw new Error('No seats available for this ride');
+      }
+      
+      // Insert booking
+      const { data: bookingData, error: bookingError } = await supabase
         .from('bookings')
         .insert({
           ride_id: id,
           user_id: userId,
-          seats_booked: 1
-        });
+          seats_booked: 1,
+          status: 'confirmed'
+        })
+        .select();
         
       if (bookingError) {
         throw new Error(bookingError.message);
-      }
-      
-      const { success, error: updateError } = await decreaseAvailableSeats(id, 1);
-      
-      if (!success || updateError) {
-        throw new Error(updateError?.message || 'Failed to update seat availability');
       }
       
       toast({
@@ -121,6 +133,7 @@ const BookRide = () => {
         description: "You've successfully booked this ride.",
       });
       
+      // Refresh rides after successful booking
       fetchRides();
     } catch (err: any) {
       console.error(`Error booking ride ${id}:`, err);

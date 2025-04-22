@@ -24,7 +24,6 @@ const Dashboard = () => {
     try {
       setLoading(true);
       
-      // Get current user session
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !sessionData.session) {
@@ -42,12 +41,13 @@ const Dashboard = () => {
         
       if (hostedError) throw hostedError;
       
-      // Fetch rides the user has booked
+      // Fetch rides the user has booked with confirmed status
       const { data: bookedData, error: bookedError } = await supabase
         .from('bookings')
         .select(`
           ride_id,
           seats_booked,
+          status,
           rides (
             id, 
             pickup_location, 
@@ -61,7 +61,8 @@ const Dashboard = () => {
             )
           )
         `)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('status', 'confirmed');
         
       if (bookedError) throw bookedError;
       
@@ -93,11 +94,10 @@ const Dashboard = () => {
       setUpcomingBookedRides(formattedBookedRides);
       
       // Calculate stats
-      // In a real app, these would be calculated more precisely
       const totalHosted = formattedHostedRides.length;
       const totalTaken = formattedBookedRides.length;
-      const estimatedCO2PerRide = 4; // kg CO2 saved per ride, this is an example value
-      const estimatedMoneyPerRide = 7; // $ saved per ride, this is an example value
+      const estimatedCO2PerRide = 4;
+      const estimatedMoneyPerRide = 7;
       
       setStats({
         ridesHosted: totalHosted,
@@ -141,12 +141,13 @@ const Dashboard = () => {
 
   const cancelRide = async (id: string) => {
     try {
-      // Get current user session
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !sessionData.session) {
         throw new Error('You must be logged in to cancel a ride');
       }
+      
+      const userId = sessionData.session.user.id;
       
       // Check if this is a ride the user is hosting or has booked
       const isHosted = upcomingHostedRides.some(ride => ride.id === id);
@@ -157,18 +158,18 @@ const Dashboard = () => {
           .from('rides')
           .delete()
           .eq('id', id)
-          .eq('user_id', sessionData.session.user.id);
+          .eq('user_id', userId);
           
         if (error) throw error;
       } else {
-        // Cancel the booking
-        const { error } = await supabase
+        // Cancel the booking and update ride seats
+        const { error: bookingError } = await supabase
           .from('bookings')
-          .delete()
+          .update({ status: 'cancelled' })
           .eq('ride_id', id)
-          .eq('user_id', sessionData.session.user.id);
+          .eq('user_id', userId);
           
-        if (error) throw error;
+        if (bookingError) throw bookingError;
         
         // Increase available seats back
         const { success, error: updateError } = await increaseAvailableSeats(id, 1);
