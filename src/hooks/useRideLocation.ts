@@ -36,13 +36,23 @@ export function useRideLocation({
           filter: `ride_id=eq.${rideId}`,
         },
         (payload) => {
-          if (payload.new) {
-            setLocation({
-              lat: Number(payload.new.latitude),
-              lng: Number(payload.new.longitude)
-            });
-            setEtaSeconds(payload.new.eta_seconds ?? null);
-            setLastUpdated(new Date(payload.new.updated_at));
+          if (payload.new && typeof payload.new === 'object') {
+            const newData = payload.new as any; // Type assertion for payload.new
+            
+            if ('latitude' in newData && 'longitude' in newData) {
+              setLocation({
+                lat: Number(newData.latitude),
+                lng: Number(newData.longitude)
+              });
+            }
+            
+            if ('eta_seconds' in newData) {
+              setEtaSeconds(newData.eta_seconds ?? null);
+            }
+            
+            if ('updated_at' in newData) {
+              setLastUpdated(new Date(newData.updated_at));
+            }
           }
         }
       )
@@ -56,13 +66,15 @@ export function useRideLocation({
         .eq("ride_id", rideId)
         .order("updated_at", { ascending: false })
         .limit(1);
+      
       if (data && data.length > 0) {
+        const locationData = data[0];
         setLocation({
-          lat: Number(data[0].latitude),
-          lng: Number(data[0].longitude)
+          lat: Number(locationData.latitude),
+          lng: Number(locationData.longitude)
         });
-        setEtaSeconds(data[0].eta_seconds ?? null);
-        setLastUpdated(new Date(data[0].updated_at));
+        setEtaSeconds(locationData.eta_seconds ?? null);
+        setLastUpdated(new Date(locationData.updated_at));
       }
     })();
 
