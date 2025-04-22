@@ -72,6 +72,44 @@ export type Database = {
         }
         Relationships: []
       }
+      ride_locations: {
+        Row: {
+          eta_seconds: number | null
+          id: string
+          latitude: number
+          longitude: number
+          ride_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          eta_seconds?: number | null
+          id?: string
+          latitude: number
+          longitude: number
+          ride_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          eta_seconds?: number | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          ride_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ride_locations_ride_id_fkey"
+            columns: ["ride_id"]
+            isOneToOne: false
+            referencedRelation: "rides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rides: {
         Row: {
           created_at: string
