@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useRideLocation } from "@/hooks/useRideLocation";
+import { useToast } from "@/hooks/use-toast";
 
 interface RideLocationMapProps {
   rideId: string;
@@ -17,7 +18,8 @@ const RideLocationMap = ({
   hostId,
   initialLocation,
 }: RideLocationMapProps) => {
-  const [apiKey, setApiKey] = useState<string>('');
+  const { toast } = useToast();
+  const [apiKey, setApiKey] = useState<string>('pk.eyJ1Ijoic2FzcmVla3NybSIsImEiOiJjbTl0MDRiejgwNjVpMnFwb3l6d3kyZW1yIn0.zq-phlnjkgpMW8u6zzXWTw');
   const [isMapboxReady, setIsMapboxReady] = useState<boolean>(false);
 
   // For demo/preview only: you would use Supabase Auth for user ID in a real app
@@ -45,26 +47,36 @@ const RideLocationMap = ({
 
   useEffect(() => {
     if (!mapContainer.current || !apiKey) return;
-    mapboxgl.accessToken = apiKey;
+    
+    try {
+      mapboxgl.accessToken = apiKey;
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v11',
-      center: location
-        ? [location.lng, location.lat]
-        : [initialLocation?.lng || -74.006, initialLocation?.lat || 40.7128],
-      zoom: 14,
-    });
-
-    marker.current = new mapboxgl.Marker()
-      .setLngLat(
-        location
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/streets-v11',
+        center: location
           ? [location.lng, location.lat]
-          : [initialLocation?.lng || -74.006, initialLocation?.lat || 40.7128]
-      )
-      .addTo(map.current);
+          : [initialLocation?.lng || -74.006, initialLocation?.lat || 40.7128],
+        zoom: 14,
+      });
 
-    setIsMapboxReady(true);
+      marker.current = new mapboxgl.Marker()
+        .setLngLat(
+          location
+            ? [location.lng, location.lat]
+            : [initialLocation?.lng || -74.006, initialLocation?.lat || 40.7128]
+        )
+        .addTo(map.current);
+
+      setIsMapboxReady(true);
+    } catch (error) {
+      toast({
+        title: "Mapbox Error",
+        description: "Failed to initialize Mapbox. Check your access token.",
+        variant: "destructive"
+      });
+      console.error("Mapbox initialization error:", error);
+    }
 
     return () => {
       if (map.current) map.current.remove();
@@ -125,32 +137,9 @@ const RideLocationMap = ({
 
   return (
     <div className="relative w-full rounded-lg overflow-hidden">
-      {!apiKey ? (
+      {!isMapboxReady ? (
         <div className="bg-gray-100 p-4 rounded-lg border border-gray-200">
-          <p className="text-sm mb-2">Please enter your Mapbox public token to display the map:</p>
-          <div className="flex space-x-2">
-            <Input
-              type="text"
-              placeholder="Enter your Mapbox public token"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="text-xs"
-            />
-            <Button
-              size="sm"
-              onClick={() => setIsMapboxReady(false)}
-              disabled={!apiKey}
-            >
-              Set Token
-            </Button>
-          </div>
-          <p className="text-xs mt-2 text-gray-500">
-            Find your token in the <a href="https://mapbox.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Mapbox dashboard</a> after creating an account
-          </p>
-        </div>
-      ) : !isMapboxReady ? (
-        <div className="bg-gray-100 p-4 rounded-lg border border-gray-200">
-          <p className="text-sm">Loading map...</p>
+          <p className="text-sm mb-2">Initializing Mapbox...</p>
         </div>
       ) : (
         <div className="h-[400px]">
