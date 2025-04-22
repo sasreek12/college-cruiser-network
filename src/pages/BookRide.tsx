@@ -33,7 +33,7 @@ const BookRide = () => {
       
       const { data, error: ridesError } = await supabase
         .from('rides')
-        .select('*, profiles(full_name)')
+        .select('*, profiles(id, full_name)')
         .gt('seats_available', 0);
         
       if (ridesError) {
@@ -47,6 +47,7 @@ const BookRide = () => {
 
       const formattedRides = data.map(ride => ({
         id: ride.id,
+        hostId: ride.profiles?.id,
         hostName: ride.profiles?.full_name || 'Unknown Host',
         pickupLocation: ride.pickup_location,
         destination: ride.destination,

@@ -1,11 +1,12 @@
-
 import { Clock, MapPin, User } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import RideLocationMap from './RideLocationMap';
 
 export interface RideCardProps {
   id: string;
+  hostId?: string;
   hostName: string;
   pickupLocation: string;
   destination: string;
@@ -16,10 +17,12 @@ export interface RideCardProps {
   status?: 'completed' | 'cancelled' | 'upcoming';
   onBook?: (id: string) => void;
   onCancel?: (id: string) => void;
+  showLocation?: boolean;
 }
 
 const RideCard = ({
   id,
+  hostId,
   hostName,
   pickupLocation,
   destination,
@@ -30,6 +33,7 @@ const RideCard = ({
   status = 'upcoming',
   onBook,
   onCancel,
+  showLocation = false,
 }: RideCardProps) => {
   const getStatusBadge = () => {
     switch (status) {
@@ -71,6 +75,12 @@ const RideCard = ({
                 : `${seatsAvailable} ${seatsAvailable === 1 ? 'seat' : 'seats'} available`}
             </span>
           </div>
+          {showLocation && hostId && (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium mb-2">Live Location</h4>
+              <RideLocationMap rideId={id} hostId={hostId} />
+            </div>
+          )}
         </div>
       </CardContent>
       {!isHistory && (
