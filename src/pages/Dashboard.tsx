@@ -20,6 +20,9 @@ const Dashboard = () => {
     moneySaved: 0
   });
 
+  const [hostedRideIds, setHostedRideIds] = useState<string[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   const fetchRides = async () => {
     try {
       setLoading(true);
@@ -31,6 +34,7 @@ const Dashboard = () => {
       }
       
       const userId = sessionData.session.user.id;
+      setCurrentUserId(userId);
       
       // Fetch rides the user is hosting
       const { data: hostedData, error: hostedError } = await supabase
@@ -40,6 +44,13 @@ const Dashboard = () => {
         .gt('seats_available', 0);
         
       if (hostedError) throw hostedError;
+      
+      // Store hosted ride IDs to state
+      if (hostedData) {
+        setHostedRideIds(hostedData.map((ride) => ride.id));
+      } else {
+        setHostedRideIds([]);
+      }
       
       // Fetch rides the user has booked with confirmed status
       const { data: bookedData, error: bookedError } = await supabase
@@ -138,6 +149,51 @@ const Dashboard = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!hostedRideIds.length || !currentUserId) return;
+
+    // Listen for new bookings (INSERT) on bookings table ONLY for hosted rides not by current user
+    const bookingAlertChannel = supabase
+      .channel('booking-alerts-dash')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bookings',
+          filter: `ride_id=in.(${hostedRideIds.join(',')})`
+        },
+        async (payload) => {
+          const booking = payload.new;
+          // Only trigger if booked by another user (not self)
+          if (booking && booking.user_id !== currentUserId) {
+            // Fetch the ride details for a nice notification
+            const { data: rideDetails } = await supabase
+              .from('rides')
+              .select('destination,pickup_location')
+              .eq('id', booking.ride_id)
+              .maybeSingle();
+
+            let rideDest = "";
+            let ridePickup = "";
+            if (rideDetails) {
+              rideDest = rideDetails.destination;
+              ridePickup = rideDetails.pickup_location;
+            }
+            toast({
+              title: "Ride Booked!",
+              description: `Your ride${rideDest ? ` to ${rideDest}` : ""} has just been booked by a rider.`,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(bookingAlertChannel);
+    };
+  }, [hostedRideIds, currentUserId, toast]);
 
   const cancelRide = async (id: string) => {
     try {
